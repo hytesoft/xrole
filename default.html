@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>自定义文本语音采集</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #f7f7f7;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 40px auto;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px #0001;
+            padding: 32px;
+        }
+
+        h2 {
+            text-align: center;
+        }
+
+        .text-box {
+            font-size: 1.1em;
+            margin: 18px 0;
+            text-align: center;
+            color: #333;
+        }
+
+        .input-box {
+            width: 100%;
+            font-size: 1.1em;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            margin-bottom: 12px;
+            resize: none;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            font-size: 1.1em;
+            margin: 12px 0;
+            border: none;
+            border-radius: 6px;
+            background: #1976d2;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .btn:disabled {
+            background: #aaa;
+        }
+
+        .status {
+            text-align: center;
+            color: #1976d2;
+            margin: 10px 0;
+        }
+
+        hr {
+            border: 0;
+            height: 1px;
+            background: #ddd;
+            margin: 32px 0;
+        }
+
+        .result {
+            font-size: 1.2em;
+            margin: 16px 0;
+            padding: 10px;
+            background: #f0f8ff;
+            border-left: 4px solid #1976d2;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h2>自定义文本语音采集</h2>
+        <div class="text-box" style="color:#d32f2f;font-size:1em;">如遇“浏览器不支持录音”，请使用最新版 Chrome、Edge、Firefox
+            或国产浏览器的极速模式。部分国产浏览器（如骑士浏览器、360安全浏览器兼容模式等）不支持录音功能。</div>
+        <textarea class="input-box" id="customText" placeholder="请输入你要朗读的文本，每次一条" rows="3"></textarea>
+        <button class="btn" id="recordBtn">开始录音</button>
+        <div class="status" id="status"></div>
+        <hr>
+        <h2>语音识别测试</h2>
+        <textarea class="input-box" id="testText" placeholder="可选：输入你期望的识别内容（便于对比）" rows="3"></textarea>
+        <button class="btn" id="testRecordBtn">开始测试录音</button>
+        <div class="status" id="testStatus"></div>
+        <div class="result" id="resultBox"></div>
+    </div>
+    <script>
+        let mediaRecorder, audioChunks = [], isRecording = false;
+        const recordBtn = document.getElementById('recordBtn');
+        const statusDiv = document.getElementById('status');
+        const customText = document.getElementById('customText');
+
+        recordBtn.onclick = async function () {
+            if (!isRecording) {
+                if (!customText.value.trim()) {
+                    statusDiv.textContent = '请先输入要朗读的文本';
+                    return;
+                }
+                if (!navigator.mediaDevices) {
+                    alert('浏览器不支持录音');
+                    return;
+                }
+                recordBtn.textContent = '录音中...点击停止';
+                statusDiv.textContent = '正在录音，请朗读输入框中的文字';
+                isRecording = true;
+                audioChunks = [];
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    await uploadAudio(audioBlob, customText.value.trim());
+                    stream.getTracks().forEach(track => track.stop());
+                    isRecording = false;
+                    recordBtn.textContent = '开始录音';
+                    // 清空输入框
+                    customText.value = '';
+                };
+                mediaRecorder.start();
+            } else {
+                mediaRecorder.stop();
+                statusDiv.textContent = '上传中...';
+            }
+        };
+
+        async function uploadAudio(audioBlob, text) {
+            const formData = new FormData();
+            formData.append('file', audioBlob, 'audio.wav');
+            formData.append('text', text);
+            const res = await fetch('/upload_train_data/', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (data.msg) statusDiv.textContent = data.msg;
+        }
+
+        // 语音识别测试部分
+        let testMediaRecorder, testAudioChunks = [], testIsRecording = false;
+        const testRecordBtn = document.getElementById('testRecordBtn');
+        const testStatusDiv = document.getElementById('testStatus');
+        const resultBox = document.getElementById('resultBox');
+        const testText = document.getElementById('testText');
+
+        testRecordBtn.onclick = async function () {
+            if (!testIsRecording) {
+                if (!navigator.mediaDevices) {
+                    alert('浏览器不支持录音');
+                    return;
+                }
+                testRecordBtn.textContent = '录音中...点击停止';
+                testStatusDiv.textContent = '正在录音，请说话';
+                resultBox.textContent = '';
+                testIsRecording = true;
+                testAudioChunks = [];
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                testMediaRecorder = new MediaRecorder(stream);
+                testMediaRecorder.ondataavailable = e => testAudioChunks.push(e.data);
+                testMediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(testAudioChunks, { type: 'audio/wav' });
+                    await uploadTestAudio(audioBlob);
+                    stream.getTracks().forEach(track => track.stop());
+                    testIsRecording = false;
+                    testRecordBtn.textContent = '开始测试录音';
+                };
+                testMediaRecorder.start();
+            } else {
+                testMediaRecorder.stop();
+                testStatusDiv.textContent = '识别中...';
+            }
+        };
+
+        async function uploadTestAudio(audioBlob) {
+            const formData = new FormData();
+            formData.append('file', audioBlob, 'audio.wav');
+            // 可选：上传 testText.value 便于后端对比（如需）
+            // formData.append('text', testText.value.trim());
+            const res = await fetch('/asr/', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (data.result) {
+                let compare = '';
+                if (testText.value.trim()) {
+                    compare = '\n期望内容：' + testText.value.trim();
+                }
+                resultBox.textContent = '识别结果：' + data.result + compare;
+                testStatusDiv.textContent = '识别完成';
+            } else {
+                resultBox.textContent = '识别失败';
+                testStatusDiv.textContent = '';
+            }
+        }
+    </script>
+</body>
+
+</html>

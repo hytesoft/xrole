@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>个性化语音采集</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #f7f7f7;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 40px auto;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px #0001;
+            padding: 32px;
+        }
+
+        h2 {
+            text-align: center;
+        }
+
+        .text-box {
+            font-size: 1.3em;
+            margin: 24px 0;
+            text-align: center;
+            color: #333;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            font-size: 1.1em;
+            margin: 12px 0;
+            border: none;
+            border-radius: 6px;
+            background: #1976d2;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .btn:disabled {
+            background: #aaa;
+        }
+
+        .status {
+            text-align: center;
+            color: #1976d2;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h2>个性化语音采集</h2>
+        <div class="text-box" id="textBox">加载中...</div>
+        <button class="btn" id="recordBtn">开始录音</button>
+        <button class="btn" id="skipBtn">跳过</button>
+        <div class="status" id="status"></div>
+    </div>
+    <script>
+        let mediaRecorder, audioChunks = [], currentText = '', isRecording = false;
+        const textBox = document.getElementById('textBox');
+        const recordBtn = document.getElementById('recordBtn');
+        const skipBtn = document.getElementById('skipBtn');
+        const statusDiv = document.getElementById('status');
+
+        async function fetchNextText() {
+            textBox.textContent = '加载中...';
+            statusDiv.textContent = '';
+            const res = await fetch('/next_train_text/');
+            const data = await res.json();
+            if (!data.text) {
+                textBox.textContent = '已完成全部题目！';
+                recordBtn.disabled = true;
+                skipBtn.disabled = true;
+            } else {
+                textBox.textContent = `(${data.idx}/${data.total}) 朗读：` + data.text;
+                currentText = data.text;
+                recordBtn.disabled = false;
+                skipBtn.disabled = false;
+            }
+        }
+
+        recordBtn.onclick = async function () {
+            if (!isRecording) {
+                if (!navigator.mediaDevices) {
+                    alert('浏览器不支持录音');
+                    return;
+                }
+                recordBtn.textContent = '录音中...点击停止';
+                statusDiv.textContent = '正在录音，请朗读上方文字';
+                isRecording = true;
+                audioChunks = [];
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    await uploadAudio(audioBlob);
+                    stream.getTracks().forEach(track => track.stop());
+                    isRecording = false;
+                    recordBtn.textContent = '开始录音';
+                    fetchNextText();
+                };
+                mediaRecorder.start();
+            } else {
+                mediaRecorder.stop();
+                statusDiv.textContent = '上传中...';
+            }
+        };
+
+        skipBtn.onclick = async function () {
+            statusDiv.textContent = '已跳过';
+            fetchNextText();
+        };
+
+        async function uploadAudio(audioBlob) {
+            const formData = new FormData();
+            formData.append('file', audioBlob, 'audio.wav');
+            // 直接用当前题目文本
+            formData.append('text', currentText);
+            const res = await fetch('/upload_train_data/', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (data.msg) statusDiv.textContent = data.msg;
+        }
+
+        fetchNextText();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>语音识别测试</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #f7f7f7;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 40px auto;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px #0001;
+            padding: 32px;
+        }
+
+        h2 {
+            text-align: center;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            font-size: 1.1em;
+            margin: 12px 0;
+            border: none;
+            border-radius: 6px;
+            background: #1976d2;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .btn:disabled {
+            background: #aaa;
+        }
+
+        .status {
+            text-align: center;
+            color: #1976d2;
+            margin: 10px 0;
+        }
+
+        .result {
+            background: #f0f0f0;
+            border-radius: 6px;
+            padding: 16px;
+            margin-top: 18px;
+            font-size: 1.1em;
+            color: #222;
+            min-height: 32px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h2>语音识别测试</h2>
+        <button class="btn" id="recordBtn">开始录音</button>
+        <div class="status" id="status"></div>
+        <div class="result" id="resultBox"></div>
+    </div>
+    <script>
+        let mediaRecorder, audioChunks = [], isRecording = false;
+        const recordBtn = document.getElementById('recordBtn');
+        const statusDiv = document.getElementById('status');
+        const resultBox = document.getElementById('resultBox');
+
+        recordBtn.onclick = async function () {
+            if (!isRecording) {
+                if (!navigator.mediaDevices) {
+                    alert('浏览器不支持录音');
+                    return;
+                }
+                recordBtn.textContent = '录音中...点击停止';
+                statusDiv.textContent = '正在录音，请说话';
+                resultBox.textContent = '';
+                isRecording = true;
+                audioChunks = [];
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    await uploadAudio(audioBlob);
+                    stream.getTracks().forEach(track => track.stop());
+                    isRecording = false;
+                    recordBtn.textContent = '开始录音';
+                };
+                mediaRecorder.start();
+            } else {
+                mediaRecorder.stop();
+                statusDiv.textContent = '识别中...';
+            }
+        };
+
+        async function uploadAudio(audioBlob) {
+            const formData = new FormData();
+            formData.append('file', audioBlob, 'audio.wav');
+            const res = await fetch('/asr/', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (data.result) {
+                resultBox.textContent = '识别结果：' + data.result;
+                statusDiv.textContent = '识别完成';
+            } else {
+                resultBox.textContent = '识别失败';
+                statusDiv.textContent = '';
+            }
+        }
+    </script>
+</body>
+
+</html>

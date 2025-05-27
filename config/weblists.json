@@ -1,0 +1,12 @@
+{
+    "weblists": [
+        {
+            "title": "示例列表1",
+            "url": "https://example1.com"
+        },
+        {
+            "title": "示例列表2",
+            "url": "https://example2.com"
+        }
+    ]
+}
