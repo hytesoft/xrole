@@ -53,7 +53,7 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
         return
     # 组织大模型输入
     current_urls = [item["url"] for item in weblists]
-    llm_input = f"{prompt}\n\n这是一个{xrole_role}，他需要持续的学习新的专业知识，请检索你大脑中与他的需求内容高度相关的内容，统计出相关系数高的前几名网址。不要通用性的网址，不要首页、导航页、聚合页、门户页，也不要需要再点开二级页面才能看到内容的网址。只要专栏、专题、技术博客、学习列表等，打开网址就能直接看到系统化的学习内容或文章列表，方便后续数据采集，严禁编造或拼凑网址。每条请附简要说明。当前已抓取资源有：{current_urls}。请以JSON数组格式返回（每项为url和简要说明），如：[{{'url': '...', 'desc': '...'}}, ...]。只返回JSON数组，不要多余解释。"
+    llm_input = f"{prompt}\n\n这是一个{xrole_role}，他需要持续的学习新的专业知识，请检索你大脑中与他的需求内容高度相关的内容，统计出相关系数高的前几名网址,没有合适的就不要勉强。不要通用性的网址，不要首页、导航页、聚合页、门户页，也不要需要再点开二级页面才能看到内容的网址。只要专栏、专题、技术博客、学习列表等，打开网址就能直接看到系统化的学习内容或文章列表，方便后续数据采集，严禁编造或拼凑网址。每条请附简要说明。当前已抓取资源有：{current_urls}。请以JSON数组格式返回（每项为url和简要说明），如：[{{'url': '...', 'desc': '...'}}, ...]。只返回JSON数组，不要多余解释。"
     #llm_input = f"{prompt}\n\n请只推荐真实存在且权威的专业网站，优先推荐国际公认的学术数据库、行业协会、标准组织、权威学术期刊、政府/高校/研究机构官网，避免仅推荐商业公司或通用门户网站（如 LinkedIn、YouTube、O'Reilly、BMC 等）。推荐前请根据你大脑中的内容来源有多少来自该网址作为推荐依据，严禁编造或拼凑网址。每条请附简要说明。当前已抓取资源有：{current_urls}。请以JSON数组格式返回建议的下载资源列表（每项为url和简要说明），如：[{{'url': '...', 'desc': '...'}}, ...]。只返回JSON数组，不要多余解释。"
     llm_conf = config.get("llm", {})
     try:
@@ -130,11 +130,14 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
         return
     # 步骤1：遍历 weblists，抓取A，指纹比对
     for item in weblists:
-        url = item["url"]
+        url = item["url"].rstrip("/")
+        if url is None:
+            continue
         try:
             resp = requests.post(spider_url.rstrip("/") + "/fetch", json={"url": url}, timeout=30, verify=False)
             resp.raise_for_status()
             content_a = resp.json().get("content", "")
+            print(f"{url}")
             print(content_a)
             if not content_a:
                 logging.warning(f"{url} 抓取无内容（A阶段）")

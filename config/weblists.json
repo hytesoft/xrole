@@ -1,20 +1,24 @@
 {
   "weblists": [
     {
-      "url": "https://www.martinfowler.com/tags/Software%20Architecture.html",
-      "desc": "Martin Fowler的博客专注于软件架构和设计模式，提供深入的技术分析。"
+      "url": "https://zhuanlan.zhihu.com/collection/9807083",
+      "desc": "这是一个关于用户研究和技术博客的专栏，提供系统化的学习资源"
     },
     {
-      "url": "https://codeforces.com/blog",
-      "desc": "Codeforces博客涵盖编程竞赛、算法和技术新闻，适合提升编码能力。"
+      "url": "https://ux.design.cmu.edu/academics/perspective",
+      "desc": "卡内基梅隆大学的交互设计课程页面，包含结构化的内容和文章列表"
     },
     {
-      "url": "https://joeqaw.com/topics/software-architecture/",
-      "desc": "专注于软件架构的深入分析和案例研究，适合高级开发者。"
+      "url": "http://www.smus.com/blog",
+      "desc": "史蒂夫·克鲁格的技术博客，专注于用户体验设计"
     },
     {
-      "url": "https://kata-log.com/",
-      "desc": "技术博客，重点讨论技术债务、代码异味和技术风险管理。"
+      "url": "https://www.nngroup.com/articles/",
+      "desc": "Nielsen Norman Group的专业文章库，涵盖用户研究与体验设计"
+    },
+    {
+      "url": "https://ux-archive.net",
+      "desc": "存档的经典用户体验资源网站"
     }
   ]
 }
