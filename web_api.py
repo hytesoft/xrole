@@ -29,7 +29,7 @@ qdrant_client = QdrantClient(
 )
 
 # 初始化向量模型（可根据实际情况更换模型名）
-embedder = SentenceTransformer("/home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+embedder = SentenceTransformer("/home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", local_files_only=True)
 
 app = FastAPI(title="xrole 智能助手 API")
 

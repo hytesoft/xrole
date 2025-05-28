@@ -42,6 +42,7 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
         notify_exception(f"读取配置失败: {e}")
         return
     # 先获取当前 prompt 和 weblists
+    xrole_role=config.get("role", "")
     prompt = config.get("prompt", "")
     try:
         with open(weblist_path, "r", encoding="utf-8") as f:
@@ -52,7 +53,8 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
         return
     # 组织大模型输入
     current_urls = [item["url"] for item in weblists]
-    llm_input = f"{prompt}\n\n为了保持该角色的学习能力，需要抓取哪些专业网站或数据源？当前已抓取资源有：{current_urls}。请以JSON数组格式返回建议的下载资源列表（每项为url和简要说明），如：[{{'url': '...', 'desc': '...'}}, ...]。只返回JSON数组，不要多余解释。"
+    llm_input = f"{prompt}\n\n这是一个{xrole_role}，他需要持续的学习新的专业知识，请检索你大脑中与他的需求内容高度相关的内容，统计出相关系数高的前几名网址。不要通用性的网址，不要首页、导航页、聚合页、门户页，也不要需要再点开二级页面才能看到内容的网址。只要专栏、专题、技术博客、学习列表等，打开网址就能直接看到系统化的学习内容或文章列表，方便后续数据采集，严禁编造或拼凑网址。每条请附简要说明。当前已抓取资源有：{current_urls}。请以JSON数组格式返回（每项为url和简要说明），如：[{{'url': '...', 'desc': '...'}}, ...]。只返回JSON数组，不要多余解释。"
+    #llm_input = f"{prompt}\n\n请只推荐真实存在且权威的专业网站，优先推荐国际公认的学术数据库、行业协会、标准组织、权威学术期刊、政府/高校/研究机构官网，避免仅推荐商业公司或通用门户网站（如 LinkedIn、YouTube、O'Reilly、BMC 等）。推荐前请根据你大脑中的内容来源有多少来自该网址作为推荐依据，严禁编造或拼凑网址。每条请附简要说明。当前已抓取资源有：{current_urls}。请以JSON数组格式返回建议的下载资源列表（每项为url和简要说明），如：[{{'url': '...', 'desc': '...'}}, ...]。只返回JSON数组，不要多余解释。"
     llm_conf = config.get("llm", {})
     try:
         resp = requests.post(
@@ -66,21 +68,25 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
         )
         llm_text = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
         print(llm_text)
-        # 尝试解析大模型返回的JSON数组
+        # 健壮提取大模型返回的JSON数组，防止思维过程干扰
         import re
         import ast
-        match = re.search(r'\[.*\]', llm_text, re.DOTALL)
+        match = re.search(r'(\[.*?\])', llm_text, re.DOTALL)
         if match:
-            new_weblists = ast.literal_eval(match.group(0))
-            # 兼容格式，补全 desc 字段
-            for item in new_weblists:
-                if "desc" not in item:
-                    item["desc"] = ""
-            # 更新 weblists.json
-            with open(weblist_path, "w", encoding="utf-8") as f:
-                json.dump({"weblists": new_weblists}, f, ensure_ascii=False, indent=2)
-            logging.info(f"已根据大模型建议更新 weblists.json，资源数: {len(new_weblists)}")
-            weblists = new_weblists
+            try:
+                new_weblists = ast.literal_eval(match.group(1))
+                # 兼容格式，补全 desc 字段
+                for item in new_weblists:
+                    if "desc" not in item:
+                        item["desc"] = ""
+                # 更新 weblists.json
+                with open(weblist_path, "w", encoding="utf-8") as f:
+                    json.dump({"weblists": new_weblists}, f, ensure_ascii=False, indent=2)
+                logging.info(f"已根据大模型建议更新 weblists.json，资源数: {len(new_weblists)}")
+                weblists = new_weblists
+            except Exception as e:
+                logging.error(f"大模型输出无法解析为JSON数组，原始输出: {llm_text}")
+                notify_exception(f"大模型输出无法解析为JSON数组: {e}")
         else:
             logging.warning("大模型未返回有效的资源列表，继续用原有 weblists")
     except Exception as e:
@@ -93,8 +99,16 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
     embedder_dict = {}
     for m in embedding_models:
         model_name = m["name"]
+        # 如果不是绝对路径，拼成绝对路径（修正：去掉多余的 ..）
+        if not os.path.isabs(model_name):
+            local_model_path = os.path.join(root_dir, "models", "sentence-transformers", model_name)
+            local_model_path = os.path.abspath(local_model_path)
+        else:
+            local_model_path = model_name
         try:
-            embedder_dict[model_name] = SentenceTransformer(model_name)
+            logging.info(f"尝试加载 embedding 模型: {local_model_path}")
+            embedder_dict[model_name] = SentenceTransformer(local_model_path, local_files_only=True)
+            logging.info(f"embedding 模型 {model_name} 已用本地路径 {local_model_path} 加载成功")
         except Exception as e:
             notify_exception(f"加载 embedding 模型 {model_name} 失败: {e}")
     # collection 支持
@@ -121,6 +135,7 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
             resp = requests.post(spider_url.rstrip("/") + "/fetch", json={"url": url}, timeout=30, verify=False)
             resp.raise_for_status()
             content_a = resp.json().get("content", "")
+            print(content_a)
             if not content_a:
                 logging.warning(f"{url} 抓取无内容（A阶段）")
                 continue
@@ -166,6 +181,7 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
                         resp_b = requests.post(spider_url.rstrip("/") + "/fetch", json={"url": b_url}, timeout=30, verify=False)
                         resp_b.raise_for_status()
                         content_b = resp_b.json().get("content", "")
+                        print(content_b)
                         if not content_b:
                             logging.warning(f"{b_url} 抓取无内容（B阶段）")
                             continue

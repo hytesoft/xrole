@@ -1,44 +1,20 @@
 {
   "weblists": [
     {
-      "url": "https://www.babokguide.org/",
-      "desc": "Business Analysis Body of Knowledge (BABOK) - 提供全面且权威的企业分析知识体系，包含需求分析、商业分析、利益相关者管理等。"
+      "url": "https://www.martinfowler.com/tags/Software%20Architecture.html",
+      "desc": "Martin Fowler的博客专注于软件架构和设计模式，提供深入的技术分析。"
     },
     {
-      "url": "https://www.scaledagileframework.com/",
-      "desc": "Scaled Agile Framework (SAFe) - 了解SAFe框架下的需求管理方法，特别是在大型敏捷项目中的应用。"
+      "url": "https://codeforces.com/blog",
+      "desc": "Codeforces博客涵盖编程竞赛、算法和技术新闻，适合提升编码能力。"
     },
     {
-      "url": "https://www.tl.org/",
-      "desc": "The Management and IT Standards (MIT Standards) - 涵盖需求获取、分析、明确、验证和管理相关的标准和最佳实践。"
+      "url": "https://joeqaw.com/topics/software-architecture/",
+      "desc": "专注于软件架构的深入分析和案例研究，适合高级开发者。"
     },
     {
-      "url": "https://www.igi-global.com/dictionary/requirements-engineering/68377",
-      "desc": "IGI Global's Dictionary of Requirements Engineering - 提供需求工程相关的词汇解释和概念定义。"
-    },
-    {
-      "url": "https://www.bmc.com/blogs/requirements-management/",
-      "desc": "BMC Blogs on Requirements Management - 提供需求管理的实践经验和技术文章。"
-    },
-    {
-      "url": "https://www.oreilly.com/search/?query=requirements+management",
-      "desc": "O'Reilly Online Learning - 搜索与需求管理相关的书籍、视频课程和文章，深入学习技能。"
-    },
-    {
-      "url": "https://www.linkedin.com/learning/search?keywords=requirements%20management",
-      "desc": "LinkedIn Learning - 搜索需求管理相关的在线课程，提升专业技能。"
-    },
-    {
-      "url": "https://www.youtube.com/results?search_query=requirements+management+techniques",
-      "desc": "YouTube - 搜索与需求管理技术相关的视频教程，学习实践技巧。"
-    },
-    {
-      "url": "https://uxplanet.org/tag/requirements-engineering",
-      "desc": "UX Planet - 关注用户体验设计视角下的需求工程，确保产品满足用户需求。"
-    },
-    {
-      "url": "https://www.devops.com/requirements-management/",
-      "desc": "DevOps.com - 了解DevOps环境下的需求管理实践。"
+      "url": "https://kata-log.com/",
+      "desc": "技术博客，重点讨论技术债务、代码异味和技术风险管理。"
     }
   ]
 }
