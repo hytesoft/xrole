@@ -56,7 +56,7 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
     llm_conf = config.get("llm", {})
     try:
         resp = requests.post(
-            llm_conf.get("base_url") + "/v1/chat/completions",
+            llm_conf.get("base_url"),
             headers={"Authorization": f"Bearer {llm_conf.get('api_key', '')}"},
             json={
                 "model": llm_conf.get("model"),
@@ -65,6 +65,7 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
             timeout=60
         )
         llm_text = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+        print(llm_text)
         # 尝试解析大模型返回的JSON数组
         import re
         import ast
@@ -117,7 +118,7 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
     for item in weblists:
         url = item["url"]
         try:
-            resp = requests.post(spider_url.rstrip("/") + "/fetch", json={"url": url}, timeout=30)
+            resp = requests.post(spider_url.rstrip("/") + "/fetch", json={"url": url}, timeout=30, verify=False)
             resp.raise_for_status()
             content_a = resp.json().get("content", "")
             if not content_a:
@@ -141,7 +142,7 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
             llm_input2 = f"{prompt}\n\n请从以下内容中提取所有有价值的资源url，按时间顺序输出JSON数组（如: ['url1', 'url2', ...]），只返回数组，不要解释。内容：{content_a[:1000]}..."
             try:
                 resp2 = requests.post(
-                    llm_conf.get("base_url") + "/v1/chat/completions",
+                    llm_conf.get("base_url"),
                     headers={"Authorization": f"Bearer {llm_conf.get('api_key', '')}"},
                     json={
                         "model": llm_conf.get("model"),
@@ -162,7 +163,7 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
                 # 步骤3：遍历大模型返回的url列表，逐个抓取B，指纹比对，遇到老数据提前终止
                 for b_url in url_list:
                     try:
-                        resp_b = requests.post(spider_url.rstrip("/") + "/fetch", json={"url": b_url}, timeout=30)
+                        resp_b = requests.post(spider_url.rstrip("/") + "/fetch", json={"url": b_url}, timeout=30, verify=False)
                         resp_b.raise_for_status()
                         content_b = resp_b.json().get("content", "")
                         if not content_b:

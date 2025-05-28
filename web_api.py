@@ -54,7 +54,7 @@ async def query_api(req: QueryRequest):
     llm_conf = config.get("llm", {})
     prompt = f"{config.get('prompt', '')}\n用户输入：{req.text}\n相关知识：{docs}\n请给出专业解答："
     llm_resp = requests.post(
-        llm_conf.get("base_url") + "/v1/chat/completions",
+        llm_conf.get("base_url"),
         headers={"Authorization": f"Bearer {llm_conf.get('api_key', '')}"},
         json={
             "model": llm_conf.get("model"),
@@ -140,7 +140,20 @@ from learning.fetch_and_learn import fetch_and_learn
 spider_conf = config.get("sprider", {})
 span_hours = int(spider_conf.get("span_hours", 24))
 scheduler = BackgroundScheduler()
-scheduler.add_job(fetch_and_learn, 'interval', hours=span_hours, next_run_time=None)
+
+def fetch_and_learn_with_log():
+    import datetime
+    print(f"[定时任务] fetch_and_learn 开始执行: {datetime.datetime.now().isoformat()}")
+    try:
+        fetch_and_learn()
+        print(f"[定时任务] fetch_and_learn 执行完成: {datetime.datetime.now().isoformat()}")
+    except Exception as e:
+        print(f"[定时任务] fetch_and_learn 执行异常: {e}")
+
+# 启动时立即执行一次
+fetch_and_learn_with_log()
+
+scheduler.add_job(fetch_and_learn_with_log, 'interval', hours=span_hours, next_run_time=None)
 scheduler.start()
 
 @app.get("/docs_page", response_class=HTMLResponse)
