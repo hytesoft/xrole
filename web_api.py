@@ -11,12 +11,11 @@ import os
 import numpy as np
 from learning.url_fingerprint import FingerprintDB
 from apscheduler.schedulers.background import BackgroundScheduler
-import threading
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse
 
 # 读取配置文件
-def load_config(path: str = "xrole.conf") -> Dict[str, Any]:
+def load_config(path: str = "config/xrole.conf") -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -30,7 +29,7 @@ qdrant_client = QdrantClient(
 )
 
 # 初始化向量模型（可根据实际情况更换模型名）
-embedder = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+embedder = SentenceTransformer("/home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
 
 app = FastAPI(title="xrole 智能助手 API")
 
@@ -143,12 +142,11 @@ span_hours = int(spider_conf.get("span_hours", 24))
 scheduler = BackgroundScheduler()
 scheduler.add_job(fetch_and_learn, 'interval', hours=span_hours, next_run_time=None)
 scheduler.start()
-threading.Thread(target=scheduler.start, daemon=True).start()
 
 @app.get("/docs_page", response_class=HTMLResponse)
 def custom_docs_page():
     # 提供一个简单的前端页面入口，跳转到 FastAPI 的 Swagger UI
-    return get_swagger_ui_html(openapi_url=app.openapi_url, title="xrole API 文档")
+    return get_swagger_ui_html(openapi_url=app.openapi_url or "/openapi.json", title="xrole API 文档")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
