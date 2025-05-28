@@ -1,14 +1,11 @@
-paddlepaddle==2.6.2
-paddlespeech
 fastapi
 uvicorn
-soundfile
-python-multipart
-ffmpeg-python
-# paddlespeech_ctcdecoders 为可选依赖，主流程无需安装，安装失败可忽略
 pydantic
 qdrant-client
-sentence-transformers
+sentence-transformers==2.2.2
 requests
 numpy
 apscheduler
+# requirements for offline sentence-transformers embedding model
+transformers==4.30.2
+huggingface_hub==0.14.1
