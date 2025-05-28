@@ -111,106 +111,198 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
             logging.info(f"embedding 模型 {model_name} 已用本地路径 {local_model_path} 加载成功")
         except Exception as e:
             notify_exception(f"加载 embedding 模型 {model_name} 失败: {e}")
-    # collection 支持
-    collections = config.get("collections")
-    if not collections:
-        collections = ["xrole_docs"]
-    # 初始化依赖
-    fingerprint_db = FingerprintDB()
-    qdrant_conf = config.get("qdrant", {})
-    qdrant_client = QdrantClient(
-        url=qdrant_conf.get("url"),
-        api_key=qdrant_conf.get("api_key")
-    )
-    # 读取 weblists.json 和大模型推荐后，再获取 spider_url
-    spider_conf = config.get("sprider", {})
-    spider_url = spider_conf.get("url")
-    if not spider_url:
-        logging.warning("未配置 spider.url，跳过抓取")
-        return
-    # 步骤1：遍历 weblists，抓取A，指纹比对
-    for item in weblists:
-        url = item["url"].rstrip("/")
-        if url is None:
-            continue
-        try:
-            resp = requests.post(spider_url.rstrip("/") + "/fetch", json={"url": url}, timeout=30, verify=False)
-            resp.raise_for_status()
-            content_a = resp.json().get("content", "")
-            print(f"{url}")
-            print(content_a)
-            if not content_a:
-                logging.warning(f"{url} 抓取无内容（A阶段）")
-                continue
-            model_name = item.get("embedding_model") or embedding_models[0]["name"]
-            embedder = embedder_dict.get(model_name)
-            if not embedder:
-                logging.error(f"未找到 embedding 模型 {model_name}，跳过 {url}")
-                continue
-            vector_a = embedder.encode(content_a)
-            exists = False
-            for _, fp in fingerprint_db.get_all_fingerprints():
-                if cosine_sim(vector_a, fp) > 0.95:
-                    exists = True
-                    break
-            if exists:
-                logging.info(f"{url} 内容A已存在，跳过")
-                continue
-            # 步骤2：A为新内容，发给大模型让其抽取url列表
-            llm_input2 = f"{prompt}\n\n请从以下内容中提取所有有价值的资源url，按时间顺序输出JSON数组（如: ['url1', 'url2', ...]），只返回数组，不要解释。内容：{content_a[:1000]}..."
-            try:
-                resp2 = requests.post(
-                    llm_conf.get("base_url"),
-                    headers={"Authorization": f"Bearer {llm_conf.get('api_key', '')}"},
-                    json={
-                        "model": llm_conf.get("model"),
-                        "messages": [{"role": "user", "content": llm_input2}]
-                    },
-                    timeout=60
-                )
-                llm_text2 = resp2.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-                import re
-                import ast
-                match2 = re.search(r'\[.*\]', llm_text2, re.DOTALL)
-                if match2:
-                    url_list = ast.literal_eval(match2.group(0))
-                    logging.info(f"大模型抽取到{len(url_list)}个url，准备抓取B阶段")
-                else:
-                    logging.warning(f"大模型未返回有效url列表，跳过 {url}")
+    if __name__ == "__main__":
+        import argparse
+        parser = argparse.ArgumentParser(description="xrole fetch_and_learn")
+        parser.add_argument('--mode', choices=['all', 'network', 'local'], default='all', help='all=全部，network=只采集网络，local=只导入本地资料')
+        args = parser.parse_args()
+
+        # collection 支持
+        collections = config.get("collections")
+        if not collections:
+            collections = ["xrole_docs"]
+        # 初始化依赖
+        fingerprint_db = FingerprintDB()
+        qdrant_conf = config.get("qdrant", {})
+        qdrant_client = QdrantClient(
+            url=qdrant_conf.get("url"),
+            api_key=qdrant_conf.get("api_key")
+        )
+        # 读取 weblists.json 和大模型推荐后，再获取 spider_url
+        spider_conf = config.get("sprider", {})
+        spider_url = spider_conf.get("url")
+        if not spider_url:
+            logging.warning("未配置 spider.url，跳过抓取")
+            return
+        if args.mode in ('all', 'network'):
+            # 网络采集主流程
+            # 步骤1：遍历 weblists，抓取A，指纹比对
+            for item in weblists:
+                url = item["url"].rstrip("/")
+                if url is None:
                     continue
-                # 步骤3：遍历大模型返回的url列表，逐个抓取B，指纹比对，遇到老数据提前终止
-                for b_url in url_list:
+                try:
+                    resp = requests.post(spider_url.rstrip("/") + "/fetch", json={"url": url}, timeout=30, verify=False)
+                    resp.raise_for_status()
+                    content_a = resp.json().get("content", "")
+                    print(f"{url}")
+                    print(content_a)
+                    if not content_a:
+                        logging.warning(f"{url} 抓取无内容（A阶段）")
+                        continue
+                    model_name = item.get("embedding_model") or embedding_models[0]["name"]
+                    embedder = embedder_dict.get(model_name)
+                    if not embedder:
+                        logging.error(f"未找到 embedding 模型 {model_name}，跳过 {url}")
+                        continue
+                    vector_a = embedder.encode(content_a)
+                    exists = False
+                    for _, fp in fingerprint_db.get_all_fingerprints():
+                        if cosine_sim(vector_a, fp) > 0.95:
+                            exists = True
+                            break
+                    if exists:
+                        logging.info(f"{url} 内容A已存在，跳过")
+                        continue
+                    # 步骤2：A为新内容，发给大模型让其抽取url列表
+                    llm_input2 = f"{prompt}\n\n请从以下内容中提取所有有价值的资源url，按时间顺序输出JSON数组（如: ['url1', 'url2', ...]），只返回数组，不要解释。内容：{content_a[:1000]}..."
                     try:
-                        resp_b = requests.post(spider_url.rstrip("/") + "/fetch", json={"url": b_url}, timeout=30, verify=False)
-                        resp_b.raise_for_status()
-                        content_b = resp_b.json().get("content", "")
-                        print(content_b)
-                        if not content_b:
-                            logging.warning(f"{b_url} 抓取无内容（B阶段）")
-                            continue
-                        vector_b = embedder.encode(content_b)
-                        exists_b = False
-                        for _, fp in fingerprint_db.get_all_fingerprints():
-                            if cosine_sim(vector_b, fp) > 0.95:
-                                exists_b = True
-                                break
-                        if exists_b:
-                            logging.info(f"{b_url} 内容B已存在，后续url跳过")
-                            break  # 按时间顺序，遇到老数据提前终止
-                        # 新内容，入库
-                        fingerprint_db.add_fingerprint(b_url, vector_b)
-                        qdrant_client.upsert(
-                            collection_name=item.get("collection") or collections[0],
-                            points=[{
-                                "id": hashlib.md5(b_url.encode()).hexdigest(),
-                                "vector": vector_b.tolist(),
-                                "payload": {"url": b_url, "content": content_b, "embedding_model": model_name}
-                            }]
+                        resp2 = requests.post(
+                            llm_conf.get("base_url"),
+                            headers={"Authorization": f"Bearer {llm_conf.get('api_key', '')}"},
+                            json={
+                                "model": llm_conf.get("model"),
+                                "messages": [{"role": "user", "content": llm_input2}]
+                            },
+                            timeout=60
                         )
-                        logging.info(f"{b_url} 新内容已入库 [模型:{model_name} 集合:{item.get('collection') or collections[0]}]")
+                        llm_text2 = resp2.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+                        import re
+                        import ast
+                        match2 = re.search(r'\[.*\]', llm_text2, re.DOTALL)
+                        if match2:
+                            url_list = ast.literal_eval(match2.group(0))
+                            logging.info(f"大模型抽取到{len(url_list)}个url，准备抓取B阶段")
+                        else:
+                            logging.warning(f"大模型未返回有效url列表，跳过 {url}")
+                            continue
+                        # 步骤3：遍历大模型返回的url列表，逐个抓取B，指纹比对，遇到老数据提前终止
+                        for b_url in url_list:
+                            try:
+                                resp_b = requests.post(spider_url.rstrip("/") + "/fetch", json={"url": b_url}, timeout=30, verify=False)
+                                resp_b.raise_for_status()
+                                content_b = resp_b.json().get("content", "")
+                                print(content_b)
+                                if not content_b:
+                                    logging.warning(f"{b_url} 抓取无内容（B阶段）")
+                                    continue
+                                vector_b = embedder.encode(content_b)
+                                exists_b = False
+                                for _, fp in fingerprint_db.get_all_fingerprints():
+                                    if cosine_sim(vector_b, fp) > 0.95:
+                                        exists_b = True
+                                        break
+                                if exists_b:
+                                    logging.info(f"{b_url} 内容B已存在，后续url跳过")
+                                    break  # 按时间顺序，遇到老数据提前终止
+                                # 新内容，入库
+                                fingerprint_db.add_fingerprint(b_url, vector_b)
+                                qdrant_client.upsert(
+                                    collection_name=item.get("collection") or collections[0],
+                                    points=[{
+                                        "id": hashlib.md5(b_url.encode()).hexdigest(),
+                                        "vector": vector_b.tolist(),
+                                        "payload": {"url": b_url, "content": content_b, "embedding_model": model_name}
+                                    }]
+                                )
+                                logging.info(f"{b_url} 新内容已入库 [模型:{model_name} 集合:{item.get('collection') or collections[0]}]")
+                            except Exception as e:
+                                logging.error(f"{b_url} B阶段抓取或入库失败: {e}")
                     except Exception as e:
-                        logging.error(f"{b_url} B阶段抓取或入库失败: {e}")
-            except Exception as e:
-                notify_exception(f"大模型抽取url失败: {e}")
-        except Exception as e:
-            logging.error(f"{url} A阶段抓取或大模型处理失败: {e}")
+                        notify_exception(f"大模型抽取url失败: {e}")
+                except Exception as e:
+                    logging.error(f"{url} A阶段抓取或大模型处理失败: {e}")
+        if args.mode in ('all', 'local'):
+            # 本地资料导入
+            material_dir = config.get("material_dir", "/data/xrole_materials")
+            import_materials(material_dir, embedder_dict, embedding_models, collections, fingerprint_db, qdrant_client)
+    # 本地资料导入独立调用
+    material_dir = config.get("material_dir", "/data/xrole_materials")
+    import_materials(material_dir, embedder_dict, embedding_models, collections, fingerprint_db, qdrant_client)
+
+def file_fingerprint(file_path, content):
+    return hashlib.md5((file_path + content).encode('utf-8')).hexdigest()
+
+def import_materials(material_dir, embedder_dict, embedding_models, collections, fingerprint_db, qdrant_client):
+    """自动导入宿主机挂载的学习资料（去重，避免重复学习）"""
+    supported_exts = [".txt", ".md", ".pdf", ".ppt", ".pptx"]
+    try:
+        import glob
+        from pathlib import Path
+        # 可选依赖
+        try:
+            import pdfplumber
+        except ImportError:
+            pdfplumber = None
+        try:
+            from pptx import Presentation
+        except ImportError:
+            Presentation = None
+        files = []
+        for ext in supported_exts:
+            files.extend(glob.glob(os.path.join(material_dir, f"**/*{ext}"), recursive=True))
+        for file_path in files:
+            ext = Path(file_path).suffix.lower()
+            content = ""
+            if ext in [".txt", ".md"]:
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        content = f.read()
+                except Exception as e:
+                    logging.warning(f"读取 {file_path} 失败: {e}")
+            elif ext == ".pdf" and pdfplumber:
+                try:
+                    with pdfplumber.open(file_path) as pdf:
+                        content = "\n".join(page.extract_text() or '' for page in pdf.pages)
+                except Exception as e:
+                    logging.warning(f"解析 PDF {file_path} 失败: {e}")
+            elif ext in [".ppt", ".pptx"] and Presentation:
+                try:
+                    prs = Presentation(file_path)
+                    slides = []
+                    for slide in prs.slides:
+                        for shape in slide.shapes:
+                            if hasattr(shape, "text"):
+                                slides.append(shape.text)
+                    content = "\n".join(slides)
+                except Exception as e:
+                    logging.warning(f"解析 PPT {file_path} 失败: {e}")
+            if content:
+                # 计算文件指纹，避免重复学习
+                fp = file_fingerprint(file_path, content)
+                exists = False
+                for _, old_fp in fingerprint_db.get_all_fingerprints():
+                    if fp == old_fp:
+                        exists = True
+                        break
+                if exists:
+                    logging.info(f"资料已学习过，跳过: {file_path}")
+                    continue
+                # 只用第一个 embedding 模型
+                model_name = embedding_models[0]["name"]
+                embedder = embedder_dict.get(model_name)
+                if embedder:
+                    vector = embedder.encode(content)
+                    url = f"file://{file_path}"
+                    fingerprint_db.add_fingerprint(url, fp)
+                    qdrant_client.upsert(
+                        collection_name=collections[0],
+                        points=[{
+                            "id": hashlib.md5(url.encode()).hexdigest(),
+                            "vector": vector.tolist(),
+                            "payload": {"url": url, "content": content, "embedding_model": model_name, "source": "material_dir"}
+                        }]
+                    )
+                    logging.info(f"已导入学习资料: {file_path}")
+    except Exception as e:
+        logging.error(f"自动导入学习资料失败: {e}")
