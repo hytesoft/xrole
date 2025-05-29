@@ -1,0 +1,45 @@
+2025-05-29 18:12:31,975 INFO Use pytorch device_name: cpu
+2025-05-29 18:12:31,975 INFO Load pretrained SentenceTransformer: /home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+2025-05-29 18:12:58,757 INFO 已根据大模型建议更新 weblists.json，资源数: 5
+2025-05-29 18:12:58,757 INFO 尝试加载 embedding 模型: /home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+2025-05-29 18:12:58,758 INFO Use pytorch device_name: cpu
+2025-05-29 18:12:58,758 INFO Load pretrained SentenceTransformer: /home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+2025-05-29 18:12:59,760 INFO embedding 模型 paraphrase-multilingual-MiniLM-L12-v2 已用本地路径 /home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 加载成功
+2025-05-29 18:13:00,105 INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-05-29 18:13:00,105 INFO Added job "fetch_and_learn_with_log" to job store "default"
+2025-05-29 18:13:00,106 INFO Scheduler started
+2025-05-29 18:13:00,112 ERROR Form data requires "python-multipart" to be installed. 
+You can install "python-multipart" with: 
+
+pip install python-multipart
+
+2025-05-29 18:14:12,179 INFO Use pytorch device_name: cpu
+2025-05-29 18:14:12,179 INFO Load pretrained SentenceTransformer: /home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+2025-05-29 18:14:26,302 INFO 已根据大模型建议更新 weblists.json，资源数: 5
+2025-05-29 18:14:26,302 INFO 尝试加载 embedding 模型: /home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+2025-05-29 18:14:26,303 INFO Use pytorch device_name: cpu
+2025-05-29 18:14:26,303 INFO Load pretrained SentenceTransformer: /home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+2025-05-29 18:14:27,309 INFO embedding 模型 paraphrase-multilingual-MiniLM-L12-v2 已用本地路径 /home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 加载成功
+2025-05-29 18:14:27,310 INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-05-29 18:14:27,310 INFO Added job "fetch_and_learn_with_log" to job store "default"
+2025-05-29 18:14:27,311 INFO Scheduler started
+2025-05-29 18:15:25,598 INFO Use pytorch device_name: cpu
+2025-05-29 18:15:25,599 INFO Load pretrained SentenceTransformer: /home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+2025-05-29 18:15:37,170 INFO 已根据大模型建议更新 weblists.json，资源数: 5
+2025-05-29 18:15:37,170 INFO 尝试加载 embedding 模型: /home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+2025-05-29 18:15:37,171 INFO Use pytorch device_name: cpu
+2025-05-29 18:15:37,171 INFO Load pretrained SentenceTransformer: /home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+2025-05-29 18:15:38,103 INFO embedding 模型 paraphrase-multilingual-MiniLM-L12-v2 已用本地路径 /home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 加载成功
+2025-05-29 18:15:38,103 INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-05-29 18:15:38,104 INFO Added job "fetch_and_learn_with_log" to job store "default"
+2025-05-29 18:15:38,104 INFO Scheduler started
+2025-05-29 18:16:15,159 INFO Use pytorch device_name: cpu
+2025-05-29 18:16:15,159 INFO Load pretrained SentenceTransformer: /home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+2025-05-29 18:16:29,082 INFO 已根据大模型建议更新 weblists.json，资源数: 4
+2025-05-29 18:16:29,082 INFO 尝试加载 embedding 模型: /home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+2025-05-29 18:16:29,083 INFO Use pytorch device_name: cpu
+2025-05-29 18:16:29,083 INFO Load pretrained SentenceTransformer: /home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+2025-05-29 18:16:30,028 INFO embedding 模型 paraphrase-multilingual-MiniLM-L12-v2 已用本地路径 /home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 加载成功
+2025-05-29 18:16:30,029 INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-05-29 18:16:30,029 INFO Added job "fetch_and_learn_with_log" to job store "default"
+2025-05-29 18:16:30,029 INFO Scheduler started

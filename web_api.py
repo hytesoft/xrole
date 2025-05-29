@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, File
 from pydantic import BaseModel
 from typing import Any, Dict
 import json
@@ -12,7 +12,10 @@ import numpy as np
 from learning.url_fingerprint import FingerprintDB
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+import shutil
+from learning.fetch_and_learn import fetch_and_learn, import_materials
+from fastapi.staticfiles import StaticFiles
 
 # 读取配置文件
 def load_config(path: str = "config/xrole.conf") -> Dict[str, Any]:
@@ -134,7 +137,6 @@ async def fetch_content_api(req: SpiderRequest):
 # 定时任务只负责调用 learning/fetch_and_learn.py 的 fetch_and_learn 方法
 import sys
 sys.path.append("./learning")
-from learning.fetch_and_learn import fetch_and_learn
 
 # 启动定时任务
 spider_conf = config.get("sprider", {})
@@ -160,6 +162,63 @@ scheduler.start()
 def custom_docs_page():
     # 提供一个简单的前端页面入口，跳转到 FastAPI 的 Swagger UI
     return get_swagger_ui_html(openapi_url=app.openapi_url or "/openapi.json", title="xrole API 文档")
+
+@app.post("/api/import_materials")
+async def import_materials_api(file: UploadFile = File(...)):
+    """
+    上传单个文件并自动导入知识库（embedding、去重、入库）。
+    """
+    # 保存到 material_dir
+    material_dir = config.get("material_dir", "/data/xrole_materials")
+    os.makedirs(material_dir, exist_ok=True)
+    file_path = os.path.join(material_dir, file.filename)
+    with open(file_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    # 动态构造 embedding_models、embedder_dict、collections
+    embedding_models = config.get("embedding_models")
+    if not embedding_models:
+        embedding_models = [{"name": "paraphrase-multilingual-MiniLM-L12-v2"}]
+    from sentence_transformers import SentenceTransformer
+    root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    embedder_dict = {}
+    for m in embedding_models:
+        model_name = m["name"]
+        if not os.path.isabs(model_name):
+            local_model_path = os.path.join(root_dir, "models", "sentence-transformers", model_name)
+            local_model_path = os.path.abspath(local_model_path)
+        else:
+            local_model_path = model_name
+        embedder_dict[model_name] = SentenceTransformer(local_model_path, local_files_only=True)
+    collections = config.get("collections")
+    if not collections:
+        collections = ["xrole_docs"]
+    from learning.url_fingerprint import FingerprintDB
+    fingerprint_db = FingerprintDB()
+    from qdrant_client import QdrantClient
+    qdrant_conf = config.get("qdrant", {})
+    qdrant_client = QdrantClient(
+        url=qdrant_conf.get("url"),
+        api_key=qdrant_conf.get("api_key")
+    )
+    # 只处理上传的单个文件
+    try:
+        import_materials(material_dir, embedder_dict, embedding_models, collections, fingerprint_db, qdrant_client)
+        return JSONResponse({"msg": "文件已上传并导入知识库", "filename": file.filename})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# 挂载 Streamlit 前端静态文件（假设已用 streamlit run --browser.serverAddress 127.0.0.1 --server.headless true --server.runOnSave true --server.fileWatcherType none --server.port 8501 --server.enableCORS false --server.enableXsrfProtection false --server.baseUrlPath /admin 运行，或将前端静态文件打包到 static/admin）
+# 这里假设将 streamlit_app.py 打包为静态HTML（如用 streamlit export），或用 streamlit-static 或 gradio-static 方案
+# 你也可以用 npm build 的前端静态页面放到 static/admin
+
+# 挂载静态目录
+app.mount("/admin/static", StaticFiles(directory="static/admin"), name="admin-static")
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_index():
+    # 返回管理界面首页（可用nginx反向代理 /admin 到此路由）
+    with open("static/admin/index.html", encoding="utf-8") as f:
+        return f.read()
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

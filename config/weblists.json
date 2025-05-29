@@ -1,24 +1,20 @@
 {
   "weblists": [
     {
-      "url": "https://zhuanlan.zhihu.com/collection/9807083",
-      "desc": "这是一个关于用户研究和技术博客的专栏，提供系统化的学习资源"
+      "url": "https://medium.com/topic/programming",
+      "desc": "这个链接是一个专门的编程主题页面，上面有很多关于不同编程语言和技术的文章。"
     },
     {
-      "url": "https://ux.design.cmu.edu/academics/perspective",
-      "desc": "卡内基梅隆大学的交互设计课程页面，包含结构化的内容和文章列表"
+      "url": "https://realworld.dev/",
+      "desc": "这是一个专注于真实世界开发经验的技术博客，提供很多实际应用中的技术细节和解决方案。"
     },
     {
-      "url": "http://www.smus.com/blog",
-      "desc": "史蒂夫·克鲁格的技术博客，专注于用户体验设计"
+      "url": "https://www.pluralsight.com/blog/tech-industry",
+      "desc": "Pluralsight的技术产业博客，提供了大量关于软件开发、编程语言和相关技术的文章。"
     },
     {
-      "url": "https://www.nngroup.com/articles/",
-      "desc": "Nielsen Norman Group的专业文章库，涵盖用户研究与体验设计"
-    },
-    {
-      "url": "https://ux-archive.net",
-      "desc": "存档的经典用户体验资源网站"
+      "url": "https://cloudinary.com/blog",
+      "desc": "专注于云服务和图像处理的技术博客，提供很多关于云计算和现代网页开发的内容。"
     }
   ]
 }

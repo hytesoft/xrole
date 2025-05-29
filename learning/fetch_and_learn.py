@@ -8,6 +8,12 @@ from qdrant_client import QdrantClient
 import logging
 import time
 import os
+import subprocess
+import sys
+try:
+    from tqdm import tqdm
+except ImportError:
+    tqdm = lambda x, **kwargs: x  # 没装tqdm时降级为普通迭代
 
 def cosine_sim(a, b):
     a = np.array(a, dtype=np.float32)
@@ -32,6 +38,17 @@ def notify_exception(msg):
     # 这里可扩展为邮件/钉钉/企业微信等通知
     logging.error(f"[异常通知] {msg}")
     # 可扩展：os.system('curl ...')
+
+def run_audio2text():
+    """自动调用音视频转写脚本"""
+    from configparser import ConfigParser
+    conf_path = os.path.join(os.path.dirname(__file__), '../config/xrole.conf')
+    import json
+    with open(conf_path, 'r', encoding='utf-8') as f:
+        conf = json.load(f)
+    material_dir = conf.get('material_dir', '/data/xrole_materials')
+    script_path = os.path.join(os.path.dirname(__file__), 'audio2text.py')
+    subprocess.run([sys.executable, script_path, material_dir])
 
 def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblists.json"):
     # 读取配置
@@ -156,14 +173,9 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
                         logging.error(f"未找到 embedding 模型 {model_name}，跳过 {url}")
                         continue
                     vector_a = embedder.encode(content_a)
-                    exists = False
-                    for _, fp in fingerprint_db.get_all_fingerprints():
-                        if cosine_sim(vector_a, fp) > 0.95:
-                            exists = True
-                            break
-                    if exists:
-                        logging.info(f"{url} 内容A已存在，跳过")
-                        continue
+                    meta = {"url": url, "embedding_model": model_name}
+                    # 统一查重+入库
+                    insert_if_not_exists(url, content_a, vector_a, meta, fingerprint_db, qdrant_client, item.get("collection") or collections[0])
                     # 步骤2：A为新内容，发给大模型让其抽取url列表
                     llm_input2 = f"{prompt}\n\n请从以下内容中提取所有有价值的资源url，按时间顺序输出JSON数组（如: ['url1', 'url2', ...]），只返回数组，不要解释。内容：{content_a[:1000]}..."
                     try:
@@ -233,6 +245,45 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
 def file_fingerprint(file_path, content):
     return hashlib.md5((file_path + content).encode('utf-8')).hexdigest()
 
+def insert_if_not_exists(unique_id, content, vector, meta, fingerprint_db, qdrant_client, collection, sim_threshold=0.95):
+    """
+    统一内容去重+入库接口。
+    unique_id: 可为url、file_path等唯一标识
+    content: 原始文本内容
+    vector: embedding向量
+    meta: dict，附加元信息
+    fingerprint_db: 指纹数据库实例
+    qdrant_client: Qdrant实例
+    collection: 向量库集合名
+    sim_threshold: embedding相似度去重阈值
+    """
+    # 1. 内容hash查重
+    content_hash = hashlib.md5(content.encode('utf-8')).hexdigest()
+    for _, old_fp in fingerprint_db.get_all_fingerprints():
+        if content_hash == old_fp:
+            logging.info(f"内容hash已存在，跳过: {unique_id}")
+            return False
+    # 2. embedding相似度查重
+    for _, old_fp in fingerprint_db.get_all_fingerprints():
+        try:
+            if isinstance(old_fp, (list, np.ndarray)) and cosine_sim(vector, old_fp) > sim_threshold:
+                logging.info(f"内容embedding相似，跳过: {unique_id}")
+                return False
+        except Exception:
+            continue
+    # 3. 入库
+    fingerprint_db.add_fingerprint(unique_id, content_hash)
+    qdrant_client.upsert(
+        collection_name=collection,
+        points=[{
+            "id": hashlib.md5(unique_id.encode()).hexdigest(),
+            "vector": vector.tolist(),
+            "payload": {**meta, "content_hash": content_hash}
+        }]
+    )
+    logging.info(f"新内容已入库: {unique_id}")
+    return True
+
 def import_materials(material_dir, embedder_dict, embedding_models, collections, fingerprint_db, qdrant_client):
     """自动导入宿主机挂载的学习资料（去重，避免重复学习）"""
     supported_exts = [".txt", ".md", ".pdf", ".ppt", ".pptx"]
@@ -251,7 +302,7 @@ def import_materials(material_dir, embedder_dict, embedding_models, collections,
         files = []
         for ext in supported_exts:
             files.extend(glob.glob(os.path.join(material_dir, f"**/*{ext}"), recursive=True))
-        for file_path in files:
+        for file_path in tqdm(files, desc="本地资料导入进度"):
             ext = Path(file_path).suffix.lower()
             content = ""
             if ext in [".txt", ".md"]:
@@ -278,31 +329,13 @@ def import_materials(material_dir, embedder_dict, embedding_models, collections,
                 except Exception as e:
                     logging.warning(f"解析 PPT {file_path} 失败: {e}")
             if content:
-                # 计算文件指纹，避免重复学习
-                fp = file_fingerprint(file_path, content)
-                exists = False
-                for _, old_fp in fingerprint_db.get_all_fingerprints():
-                    if fp == old_fp:
-                        exists = True
-                        break
-                if exists:
-                    logging.info(f"资料已学习过，跳过: {file_path}")
-                    continue
-                # 只用第一个 embedding 模型
                 model_name = embedding_models[0]["name"]
                 embedder = embedder_dict.get(model_name)
                 if embedder:
                     vector = embedder.encode(content)
                     url = f"file://{file_path}"
-                    fingerprint_db.add_fingerprint(url, fp)
-                    qdrant_client.upsert(
-                        collection_name=collections[0],
-                        points=[{
-                            "id": hashlib.md5(url.encode()).hexdigest(),
-                            "vector": vector.tolist(),
-                            "payload": {"url": url, "content": content, "embedding_model": model_name, "source": "material_dir"}
-                        }]
-                    )
+                    meta = {"url": url, "embedding_model": model_name, "source": "material_dir"}
+                    insert_if_not_exists(url, content, vector, meta, fingerprint_db, qdrant_client, collections[0])
                     logging.info(f"已导入学习资料: {file_path}")
     except Exception as e:
         logging.error(f"自动导入学习资料失败: {e}")
