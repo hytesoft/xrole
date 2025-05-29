@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 import shutil
 from learning.fetch_and_learn import fetch_and_learn, import_materials
 from fastapi.staticfiles import StaticFiles
+from qdrant_client.http.models import Distance, VectorParams
 
 # 读取配置文件
 def load_config(path: str = "config/xrole.conf") -> Dict[str, Any]:
@@ -30,9 +31,36 @@ qdrant_client = QdrantClient(
     url=qdrant_conf.get("url"),
     api_key=qdrant_conf.get("api_key")
 )
+# 自动创建 collection（如不存在）
+def ensure_qdrant_collection(collection_name, vector_size=384):
+    if not qdrant_client.collection_exists(collection_name):
+        qdrant_client.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE)
+        )
 
-# 初始化向量模型（可根据实际情况更换模型名）
-embedder = SentenceTransformer("/home/jj/docker/src/xrole/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", local_files_only=True)
+# 初始化向量模型（支持多模型配置，自动本地加载）
+embedding_models = config.get("embedding_models")
+if not embedding_models:
+    embedding_models = [{"name": "paraphrase-multilingual-MiniLM-L12-v2"}]
+embedder_dict = {}
+# 强制 root_dir 为 xrole 目录
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '.'))
+for m in embedding_models:
+    model_name = m["name"]
+    # 如果不是绝对路径，拼成 xrole/models/sentence-transformers/model_name
+    if not os.path.isabs(model_name):
+        local_model_path = os.path.join(root_dir, "models", "sentence-transformers", model_name)
+        local_model_path = os.path.abspath(local_model_path)
+    else:
+        local_model_path = model_name
+    try:
+        print(f"[embedding] 加载: {local_model_path}")
+        embedder_dict[model_name] = SentenceTransformer(local_model_path, local_files_only=True)
+    except Exception as e:
+        print(f"[embedding] 加载失败: {model_name} -> {e}")
+# 默认用第一个模型
+embedder = embedder_dict[embedding_models[0]["name"]]
 
 app = FastAPI(title="xrole 智能助手 API")
 
@@ -179,7 +207,8 @@ async def import_materials_api(file: UploadFile = File(...)):
     if not embedding_models:
         embedding_models = [{"name": "paraphrase-multilingual-MiniLM-L12-v2"}]
     from sentence_transformers import SentenceTransformer
-    root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    # 强制 root_dir 为 xrole 目录
+    root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '.'))
     embedder_dict = {}
     for m in embedding_models:
         model_name = m["name"]
@@ -192,6 +221,8 @@ async def import_materials_api(file: UploadFile = File(...)):
     collections = config.get("collections")
     if not collections:
         collections = ["xrole_docs"]
+    # 自动创建 collection
+    ensure_qdrant_collection(collections[0], vector_size=384)
     from learning.url_fingerprint import FingerprintDB
     fingerprint_db = FingerprintDB()
     from qdrant_client import QdrantClient
