@@ -1,16 +1,3 @@
 {
-  "weblists": [
-    {
-      "url": "https://www.iteye.com/m/articles",
-      "desc": "ITEYE是中国IT技术交流社区，提供丰富的技术文章专栏，涵盖软件开发、系统架构等领域。"
-    },
-    {
-      "url": "http://blog.rainy.org/category/java-ee-architecture/index.html",
-      "desc": "阮一峰的网络日志中的Java EE架构专栏，深入探讨企业级应用设计和实现。"
-    },
-    {
-      "url": "https://www.cnblogs.com/lzgzh/blog/column.html",
-      "desc": "博客园中关于软件系统分析的技术博客，涵盖架构设计、开发实践等内容。"
-    }
-  ]
+  "weblists": []
 }

@@ -21,8 +21,7 @@ def cosine_sim(a, b):
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
 
 # 日志配置
-root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-log_dir = os.path.join(root_dir, 'logs')
+log_dir = os.path.join(os.path.dirname(__file__), '../logs')
 os.makedirs(log_dir, exist_ok=True)
 log_file = os.path.join(log_dir, 'fetch_and_learn.log')
 logging.basicConfig(
@@ -58,16 +57,45 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
     except Exception as e:
         notify_exception(f"读取配置失败: {e}")
         return
-    # 先获取当前 prompt 和 weblists
-    xrole_role=config.get("role", "")
-    prompt = config.get("prompt", "")
-    try:
-        with open(weblist_path, "r", encoding="utf-8") as f:
-            weblists_data = json.load(f)
-            weblists = weblists_data["weblists"]
-    except Exception as e:
-        notify_exception(f"读取 weblists.json 失败: {e}")
-        return
+    root_dir = config.get("root_dir", "")
+    # material_dir、模型等全部用 root_dir 拼接
+    material_dir = os.path.join(root_dir, config.get("material_dir", "data/role_materials"))
+    embedding_models = config.get("embedding_models")
+    if not embedding_models:
+        embedding_models = [{"name": "paraphrase-multilingual-MiniLM-L12-v2"}]
+    embedder_dict = {}
+    for m in embedding_models:
+        model_name = m["name"]
+        local_model_path = os.path.join(root_dir, "models", "sentence-transformers", model_name)
+        try:
+            logging.info(f"尝试加载 embedding 模型: {local_model_path}")
+            embedder_dict[model_name] = SentenceTransformer(local_model_path)
+            logging.info(f"embedding 模型 {model_name} 已用本地路径 {local_model_path} 加载成功")
+        except Exception as e:
+            notify_exception(f"加载 embedding 模型 {model_name} 失败: {e}")
+    # 初始化 QdrantClient（无论如何都初始化）
+    qdrant_conf = config.get("qdrant", {})
+    qdrant_client = QdrantClient(
+        url=qdrant_conf.get("url"),
+        api_key=qdrant_conf.get("api_key"),
+        prefer_grpc=False,
+        verify=False
+    )
+    print("[Qdrant] connect url:"+qdrant_client.url)
+    # 优先用本地 weblists.json，不存在才考虑大模型推荐
+    import os
+    if os.path.exists(weblist_path):
+        try:
+            with open(weblist_path, "r", encoding="utf-8") as f:
+                weblists_data = json.load(f)
+                weblists = weblists_data["weblists"]
+        except Exception as e:
+            notify_exception(f"读取 weblists.json 失败: {e}")
+            return
+    else:
+        # 没有 weblists.json 就直接跳过，不再请求大模型
+        logging.warning("未找到 weblists.json，跳过大模型推荐和网络采集，仅处理本地资料导入")
+        weblists = []
     # 组织大模型输入
     current_urls = [item["url"] for item in weblists]
     llm_input = f"{prompt}\n\n这是一个{xrole_role}，他需要持续的学习新的专业知识，请检索你大脑中与他的需求内容高度相关的内容，统计出相关系数高的前几名网址,没有合适的就不要勉强。不要通用性的网址，不要首页、导航页、聚合页、门户页，也不要需要再点开二级页面才能看到内容的网址。只要专栏、专题、技术博客、学习列表等，打开网址就能直接看到系统化的学习内容或文章列表，方便后续数据采集，严禁编造或拼凑网址。每条请附简要说明。当前已抓取资源有：{current_urls}。请以JSON数组格式返回（每项为url和简要说明），如：[{{'url': '...', 'desc': '...'}}, ...]。只返回JSON数组，不要多余解释。"
@@ -116,15 +144,10 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
     embedder_dict = {}
     for m in embedding_models:
         model_name = m["name"]
-        # 如果不是绝对路径，拼成绝对路径（修正：去掉多余的 ..）
-        if not os.path.isabs(model_name):
-            local_model_path = os.path.join(root_dir, "models", "sentence-transformers", model_name)
-            local_model_path = os.path.abspath(local_model_path)
-        else:
-            local_model_path = model_name
+        local_model_path = os.path.join(root_dir, "models", "sentence-transformers", model_name)
         try:
             logging.info(f"尝试加载 embedding 模型: {local_model_path}")
-            embedder_dict[model_name] = SentenceTransformer(local_model_path, local_files_only=True)
+            embedder_dict[model_name] = SentenceTransformer(local_model_path)
             logging.info(f"embedding 模型 {model_name} 已用本地路径 {local_model_path} 加载成功")
         except Exception as e:
             notify_exception(f"加载 embedding 模型 {model_name} 失败: {e}")
@@ -139,12 +162,7 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
         if not collections:
             collections = ["xrole_docs"]
         # 初始化依赖
-        fingerprint_db = FingerprintDB()
-        qdrant_conf = config.get("qdrant", {})
-        qdrant_client = QdrantClient(
-            url=qdrant_conf.get("url"),
-            api_key=qdrant_conf.get("api_key")
-        )
+        fingerprint_db = FingerprintDB()  # 路径已在 url_fingerprint.py 内部自动拼接 root_dir
         # 读取 weblists.json 和大模型推荐后，再获取 spider_url
         spider_conf = config.get("sprider", {})
         spider_url = spider_conf.get("url")
@@ -159,7 +177,8 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
                 if url is None:
                     continue
                 try:
-                    resp = requests.post(spider_url.rstrip("/") + "/fetch", json={"url": url}, timeout=30, verify=False)
+                    # 新版接口，提交{"urls": [url], "fields": []}
+                    resp = requests.post(spider_url.rstrip("/") + "/fetch", json={"urls": [url], "fields": []}, timeout=30, verify=False)
                     resp.raise_for_status()
                     content_a = resp.json().get("content", "")
                     print(f"{url}")
@@ -235,8 +254,14 @@ def fetch_and_learn(config_path="config/xrole.conf", weblist_path="config/weblis
                 except Exception as e:
                     logging.error(f"{url} A阶段抓取或大模型处理失败: {e}")
         if args.mode in ('all', 'local'):
+            # 先自动转写音视频
+            try:
+                logging.info("开始批量音视频转写...")
+                run_audio2text()
+                logging.info("音视频转写完成！")
+            except Exception as e:
+                logging.error(f"音视频转写流程异常: {e}")
             # 本地资料导入
-            material_dir = config.get("material_dir", "/data/xrole_materials")
             import_materials(material_dir, embedder_dict, embedding_models, collections, fingerprint_db, qdrant_client)
     # 本地资料导入独立调用
     material_dir = config.get("material_dir", "/data/xrole_materials")
@@ -259,18 +284,21 @@ def insert_if_not_exists(unique_id, content, vector, meta, fingerprint_db, qdran
     """
     # 1. 内容hash查重
     content_hash = hashlib.md5(content.encode('utf-8')).hexdigest()
-    for _, old_fp in fingerprint_db.get_all_fingerprints():
-        if content_hash == old_fp:
-            logging.info(f"内容hash已存在，跳过: {unique_id}")
-            return False
-    # 2. embedding相似度查重
-    for _, old_fp in fingerprint_db.get_all_fingerprints():
-        try:
-            if isinstance(old_fp, (list, np.ndarray)) and cosine_sim(vector, old_fp) > sim_threshold:
-                logging.info(f"内容embedding相似，跳过: {unique_id}")
+    for old_url, old_fp in fingerprint_db.get_all_fingerprints():
+        if isinstance(old_fp, str):
+            if content_hash == old_fp:
+                logging.info(f"内容hash已存在，跳过: {unique_id}")
                 return False
-        except Exception:
-            continue
+    # 2. embedding相似度查重
+    for old_url, old_fp in fingerprint_db.get_all_fingerprints():
+        # 只对 np.ndarray 或 list 做相似度查重，避免直接 if old_fp
+        if isinstance(old_fp, (list, np.ndarray)):
+            try:
+                if float(cosine_sim(vector, old_fp)) > sim_threshold:
+                    logging.info(f"内容embedding相似，跳过: {unique_id}")
+                    return False
+            except Exception:
+                continue
     # 3. 入库
     fingerprint_db.add_fingerprint(unique_id, content_hash)
     qdrant_client.upsert(
@@ -286,11 +314,10 @@ def insert_if_not_exists(unique_id, content, vector, meta, fingerprint_db, qdran
 
 def import_materials(material_dir, embedder_dict, embedding_models, collections, fingerprint_db, qdrant_client):
     """自动导入宿主机挂载的学习资料（去重，避免重复学习）"""
-    supported_exts = [".txt", ".md", ".pdf", ".ppt", ".pptx"]
+    supported_exts = [".txt", ".md", ".pdf", ".ppt", ".pptx", ".doc", ".docx"]
     try:
         import glob
         from pathlib import Path
-        # 可选依赖
         try:
             import pdfplumber
         except ImportError:
@@ -299,9 +326,24 @@ def import_materials(material_dir, embedder_dict, embedding_models, collections,
             from pptx import Presentation
         except ImportError:
             Presentation = None
+        try:
+            import docx  # python-docx
+        except ImportError:
+            docx = None
+        try:
+            import textract
+        except ImportError:
+            textract = None
         files = []
         for ext in supported_exts:
             files.extend(glob.glob(os.path.join(material_dir, f"**/*{ext}"), recursive=True))
+            transcripts_dir = os.path.join(material_dir, "transcripts")
+            if os.path.exists(transcripts_dir):
+                files.extend(glob.glob(os.path.join(transcripts_dir, f"**/*{ext}"), recursive=True))
+        print(f"[import_materials] 扫描到文件数: {len(files)}")
+        for file_path in files:
+            print(f"[import_materials] 处理文件: {file_path}")
+        from tqdm import tqdm
         for file_path in tqdm(files, desc="本地资料导入进度"):
             ext = Path(file_path).suffix.lower()
             content = ""
@@ -315,25 +357,88 @@ def import_materials(material_dir, embedder_dict, embedding_models, collections,
                 try:
                     with pdfplumber.open(file_path) as pdf:
                         content = "\n".join(page.extract_text() or '' for page in pdf.pages)
+                        if not content.strip() or any((page.extract_text() or '').strip() == '' for page in pdf.pages):
+                            try:
+                                from pdf2image import convert_from_path
+                                import pytesseract
+                                ocr_texts = []
+                                images = convert_from_path(file_path)
+                                for idx, img in enumerate(images):
+                                    text = pytesseract.image_to_string(img, lang='chi_sim')
+                                    if text.strip():
+                                        ocr_texts.append(f"# page {idx+1}\n{text.strip()}")
+                                if ocr_texts:
+                                    content = "\n".join(ocr_texts)
+                                    logging.info(f"PDF {file_path} OCR 提取文本长度: {len(content)}")
+                                else:
+                                    logging.warning(f"PDF {file_path} OCR 也未提取到内容")
+                            except Exception as ocr_e:
+                                logging.warning(f"PDF {file_path} OCR 失败: {ocr_e}")
+                        else:
+                            logging.info(f"PDF {file_path} 提取文本长度: {len(content)}")
                 except Exception as e:
                     logging.warning(f"解析 PDF {file_path} 失败: {e}")
             elif ext in [".ppt", ".pptx"] and Presentation:
                 try:
                     prs = Presentation(file_path)
                     slides = []
-                    for slide in prs.slides:
+                    for slide_idx, slide in enumerate(prs.slides):
                         for shape in slide.shapes:
-                            if hasattr(shape, "text"):
+                            if hasattr(shape, "text") and getattr(shape, "text", None) and shape.text.strip():
                                 slides.append(shape.text)
+                            if hasattr(shape, "image") or getattr(shape, "shape_type", None) == 13:
+                                try:
+                                    from PIL import Image
+                                    import io
+                                    import pytesseract
+                                    image = getattr(shape, "image", None)
+                                    if image:
+                                        img_bytes = image.blob
+                                        img = Image.open(io.BytesIO(img_bytes))
+                                        ocr_text = pytesseract.image_to_string(img, lang='chi_sim')
+                                        if ocr_text.strip():
+                                            slides.append(f"# slide {slide_idx+1} 图片OCR：\n{ocr_text.strip()}")
+                                except Exception as ocr_e:
+                                    logging.warning(f"PPT 图片OCR失败: {file_path} slide {slide_idx+1}: {ocr_e}")
                     content = "\n".join(slides)
                 except Exception as e:
                     logging.warning(f"解析 PPT {file_path} 失败: {e}")
+            elif ext == ".docx":
+                if docx:
+                    try:
+                        doc = docx.Document(file_path)
+                        paras = [p.text for p in doc.paragraphs if p.text.strip()]
+                        content = "\n".join(paras)
+                        logging.info(f"Word文档 {file_path} 提取文本长度: {len(content)}")
+                    except Exception as e:
+                        logging.warning(f"解析 Word(docx) {file_path} 失败: {e}")
+                else:
+                    logging.warning(f"未安装 python-docx，无法处理 Word(docx) 文件: {file_path}")
+            elif ext == ".doc":
+                if textract:
+                    try:
+                        content = textract.process(file_path).decode("utf-8", errors="ignore")
+                        logging.info(f"Word文档 {file_path} (textract) 提取文本长度: {len(content)}")
+                    except Exception as e:
+                        logging.warning(f"解析 Word(doc) {file_path} 失败: {e}")
+                else:
+                    try:
+                        import subprocess
+                        result = subprocess.run(["antiword", file_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                        if result.returncode == 0:
+                            content = result.stdout.decode("utf-8", errors="ignore")
+                            logging.info(f"Word文档 {file_path} (antiword) 提取文本长度: {len(content)}")
+                        else:
+                            logging.warning(f"antiword 解析 {file_path} 失败: {result.stderr.decode('utf-8', errors='ignore')}")
+                    except Exception as e:
+                        logging.warning(f"未安装 textract/antiword，无法处理 Word(doc) 文件: {file_path}，错误: {e}")
             if content:
                 model_name = embedding_models[0]["name"]
                 embedder = embedder_dict.get(model_name)
                 if embedder:
                     vector = embedder.encode(content)
                     url = f"file://{file_path}"
+                    print(f"[embedding] 生成向量: {url}")
                     meta = {"url": url, "embedding_model": model_name, "source": "material_dir"}
                     insert_if_not_exists(url, content, vector, meta, fingerprint_db, qdrant_client, collections[0])
                     logging.info(f"已导入学习资料: {file_path}")
