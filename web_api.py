@@ -32,6 +32,16 @@ from typing import Dict, Any
 from pydantic import BaseModel
 from fastapi.openapi.docs import get_swagger_ui_html
 
+# 允许的扩展名和 MIME 类型（全局定义，供 API 路由使用）
+ALLOWED_EXTS = [
+    ".txt", ".md", ".pdf", ".ppt", ".pptx", ".mp3", ".wav", ".mp4", ".avi", ".mov", ".doc", ".docx"
+]
+ALLOWED_MIME = [
+    "text/plain", "application/pdf", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "audio/mpeg", "audio/wav", "video/mp4", "video/x-msvideo", "video/quicktime", "video/x-m4v",
+    "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+]
+
 # 读取配置文件
 def load_config(path: str = "config/xrole.conf") -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
@@ -242,7 +252,11 @@ async def import_materials_api(file: UploadFile = File(...)):
     import shutil
     material_dir = config.get("material_dir", "/data/xrole_materials")
     os.makedirs(material_dir, exist_ok=True)
-    file_path = os.path.join(material_dir, file.filename or "uploaded_file")
+    filename = file.filename or ""
+    ext = os.path.splitext(filename)[-1].lower()
+    if ext not in ALLOWED_EXTS or (file.content_type not in ALLOWED_MIME and not ext in [".doc", ".docx"]):
+        return JSONResponse({"error": f"不支持的文件类型: {filename}"}, status_code=400)
+    file_path = os.path.join(material_dir, filename or "uploaded_file")
     with open(file_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
     # 新增：如为音视频文件，自动调用 audio2text.py 和 video_ocr.py

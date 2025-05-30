@@ -12,8 +12,8 @@ st.title("📚 智能知识库一体化平台")
 
 # 1. 文件上传区
 def upload_file():
-    st.header("1. 资料上传（txt/pdf/md/ppt/音视频等）")
-    uploaded_file = st.file_uploader("选择文件上传", type=["txt", "md", "pdf", "ppt", "pptx", "mp3", "wav", "mp4", "avi", "mov"])
+    st.header("1. 资料上传（txt/pdf/md/ppt/word/音视频等）")
+    uploaded_file = st.file_uploader("选择文件上传", type=["txt", "md", "pdf", "ppt", "pptx", "mp3", "wav", "mp4", "avi", "mov", "doc", "docx"])
     if uploaded_file is not None:
         files = {"file": (uploaded_file.name, uploaded_file, uploaded_file.type)}
         with st.spinner("正在上传并入库..."):
