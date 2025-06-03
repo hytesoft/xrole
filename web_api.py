@@ -11,7 +11,7 @@ import importlib.metadata
 print("[版本] qdrant-client:", importlib.metadata.version("qdrant-client"))
 print("[版本] httpx:", importlib.metadata.version("httpx"))
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -224,7 +224,7 @@ def custom_docs_page():
 
 def run_audio2text_with_venv(material_dir: str):
     """
-    用虚拟环境 python 路径调用 audio2text.py，确保依赖一致。
+    用虚拟环境 python 跆调用 audio2text.py，确保依赖一致。
     """
     import subprocess
     import sys
@@ -307,6 +307,82 @@ async def import_materials_api(file: UploadFile = File(...)):
         return JSONResponse({"msg": "文件已上传并导入知识库", "filename": file.filename})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+# 批量导入进度状态文件
+PROGRESS_FILE = os.path.join("logs", "fetch_and_learn_progress.json")
+
+# 批量导入任务（异步）
+def batch_import_task(material_dir, embedder_dict, embedding_models, collections, fingerprint_db, qdrant_client):
+    import glob
+    import json
+    files = []
+    for ext in ALLOWED_EXTS:
+        files.extend(glob.glob(os.path.join(material_dir, f"*{ext}")))
+    total = len(files)
+    done = 0
+    progress = {"total": total, "done": 0, "current": None, "status": "running"}
+    with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
+        json.dump(progress, f)
+    for fpath in files:
+        fname = os.path.basename(fpath)
+        progress["current"] = fname
+        progress["done"] = done
+        with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
+            json.dump(progress, f)
+        try:
+            import_materials(os.path.dirname(fpath), embedder_dict, embedding_models, collections, fingerprint_db, qdrant_client, only_file=fname)
+        except Exception as e:
+            progress["last_error"] = str(e)
+        done += 1
+        progress["done"] = done
+        with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
+            json.dump(progress, f)
+    progress["status"] = "finished"
+    progress["current"] = None
+    with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
+        json.dump(progress, f)
+
+@app.post("/api/import_materials_batch")
+def import_materials_batch_api(background_tasks: BackgroundTasks):
+    """
+    批量导入整个资料目录，异步后台处理，进度可通过 /api/import_progress 查询。
+    """
+    material_dir = config.get("material_dir", "/data/xrole_materials")
+    embedding_models = config.get("embedding_models")
+    if not embedding_models:
+        embedding_models = [{"name": "paraphrase-multilingual-MiniLM-L12-v2"}]
+    from sentence_transformers import SentenceTransformer
+    root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '.'))
+    embedder_dict = {}
+    for m in embedding_models:
+        model_name = m["name"]
+        if not os.path.isabs(model_name):
+            local_model_path = os.path.join(root_dir, "models", "sentence-transformers", model_name)
+            local_model_path = os.path.abspath(local_model_path)
+        else:
+            local_model_path = model_name
+        embedder_dict[model_name] = SentenceTransformer(local_model_path)
+    collections = config.get("collections")
+    if not collections:
+        collections = ["xrole_docs"]
+    ensure_qdrant_collection(collections[0], vector_size=384)
+    from learning.url_fingerprint import FingerprintDB
+    fingerprint_db = FingerprintDB()
+    # 启动后台任务
+    background_tasks.add_task(batch_import_task, material_dir, embedder_dict, embedding_models, collections, fingerprint_db, qdrant_client)
+    return {"msg": "批量导入任务已启动，可通过 /api/import_progress 查询进度"}
+
+@app.get("/api/import_progress")
+def import_progress_api():
+    """
+    查询批量导入进度。
+    """
+    import json
+    if not os.path.exists(PROGRESS_FILE):
+        return {"status": "idle", "msg": "无批量导入任务"}
+    with open(PROGRESS_FILE, "r", encoding="utf-8") as f:
+        progress = json.load(f)
+    return progress
 
 # 挂载 Streamlit 前端静态文件（假设已用 streamlit run --browser.serverAddress 127.0.0.1 --server.headless true --server.runOnSave true --server.fileWatcherType none --server.port 8501 --server.enableCORS false --server.enableXsrfProtection false --server.baseUrl /admin 运行，或将前端静态文件打包到 static/admin）
 # 这里假设将 streamlit_app.py 打包为静态HTML（如用 streamlit export），或用 streamlit-static 或 gradio-static 方案

@@ -347,100 +347,120 @@ def import_materials(material_dir, embedder_dict, embedding_models, collections,
         for file_path in tqdm(files, desc="本地资料导入进度"):
             ext = Path(file_path).suffix.lower()
             content = ""
-            if ext in [".txt", ".md"]:
-                try:
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        content = f.read()
-                except Exception as e:
-                    logging.warning(f"读取 {file_path} 失败: {e}")
-            elif ext == ".pdf" and pdfplumber:
-                try:
-                    with pdfplumber.open(file_path) as pdf:
-                        content = "\n".join(page.extract_text() or '' for page in pdf.pages)
-                        if not content.strip() or any((page.extract_text() or '').strip() == '' for page in pdf.pages):
-                            try:
-                                from pdf2image import convert_from_path
-                                import pytesseract
-                                ocr_texts = []
-                                images = convert_from_path(file_path)
-                                for idx, img in enumerate(images):
-                                    text = pytesseract.image_to_string(img, lang='chi_sim')
-                                    if text.strip():
-                                        ocr_texts.append(f"# page {idx+1}\n{text.strip()}")
-                                if ocr_texts:
-                                    content = "\n".join(ocr_texts)
-                                    logging.info(f"PDF {file_path} OCR 提取文本长度: {len(content)}")
-                                else:
-                                    logging.warning(f"PDF {file_path} OCR 也未提取到内容")
-                            except Exception as ocr_e:
-                                logging.warning(f"PDF {file_path} OCR 失败: {ocr_e}")
-                        else:
-                            logging.info(f"PDF {file_path} 提取文本长度: {len(content)}")
-                except Exception as e:
-                    logging.warning(f"解析 PDF {file_path} 失败: {e}")
-            elif ext in [".ppt", ".pptx"] and Presentation:
-                try:
-                    prs = Presentation(file_path)
-                    slides = []
-                    for slide_idx, slide in enumerate(prs.slides):
-                        for shape in slide.shapes:
-                            if hasattr(shape, "text") and getattr(shape, "text", None) and shape.text.strip():
-                                slides.append(shape.text)
-                            if hasattr(shape, "image") or getattr(shape, "shape_type", None) == 13:
+            try:
+                print(f"[import_materials] 开始处理: {file_path}")
+                if ext in [".txt", ".md"]:
+                    try:
+                        with open(file_path, "r", encoding="utf-8") as f:
+                            content = f.read()
+                            print(f"[import_materials] 提取文本成功: {file_path} 长度: {len(content)}")
+                    except Exception as e:
+                        logging.warning(f"读取 {file_path} 失败: {e}")
+                        print(f"[import_materials] 处理失败: {file_path} 错误: {e}")
+                elif ext == ".pdf" and pdfplumber:
+                    try:
+                        with pdfplumber.open(file_path) as pdf:
+                            content = "\n".join(page.extract_text() or '' for page in pdf.pages)
+                            if not content.strip() or any((page.extract_text() or '').strip() == '' for page in pdf.pages):
                                 try:
-                                    from PIL import Image
-                                    import io
+                                    from pdf2image import convert_from_path
                                     import pytesseract
-                                    image = getattr(shape, "image", None)
-                                    if image:
-                                        img_bytes = image.blob
-                                        img = Image.open(io.BytesIO(img_bytes))
-                                        ocr_text = pytesseract.image_to_string(img, lang='chi_sim')
-                                        if ocr_text.strip():
-                                            slides.append(f"# slide {slide_idx+1} 图片OCR：\n{ocr_text.strip()}")
+                                    ocr_texts = []
+                                    images = convert_from_path(file_path)
+                                    for idx, img in enumerate(images):
+                                        text = pytesseract.image_to_string(img, lang='chi_sim')
+                                        if text.strip():
+                                            ocr_texts.append(f"# page {idx+1}\n{text.strip()}")
+                                    if ocr_texts:
+                                        content = "\n".join(ocr_texts)
+                                        logging.info(f"PDF {file_path} OCR 提取文本长度: {len(content)}")
+                                    else:
+                                        logging.warning(f"PDF {file_path} OCR 也未提取到内容")
                                 except Exception as ocr_e:
-                                    logging.warning(f"PPT 图片OCR失败: {file_path} slide {slide_idx+1}: {ocr_e}")
-                    content = "\n".join(slides)
-                except Exception as e:
-                    logging.warning(f"解析 PPT {file_path} 失败: {e}")
-            elif ext == ".docx":
-                if docx:
-                    try:
-                        doc = docx.Document(file_path)
-                        paras = [p.text for p in doc.paragraphs if p.text.strip()]
-                        content = "\n".join(paras)
-                        logging.info(f"Word文档 {file_path} 提取文本长度: {len(content)}")
+                                    logging.warning(f"PDF {file_path} OCR 失败: {ocr_e}")
+                            else:
+                                logging.info(f"PDF {file_path} 提取文本长度: {len(content)}")
+                        print(f"[import_materials] 提取文本成功: {file_path} 长度: {len(content)}")
                     except Exception as e:
-                        logging.warning(f"解析 Word(docx) {file_path} 失败: {e}")
-                else:
-                    logging.warning(f"未安装 python-docx，无法处理 Word(docx) 文件: {file_path}")
-            elif ext == ".doc":
-                if textract:
+                        logging.warning(f"解析 PDF {file_path} 失败: {e}")
+                        print(f"[import_materials] 处理失败: {file_path} 错误: {e}")
+                elif ext in [".ppt", ".pptx"] and Presentation:
                     try:
-                        content = textract.process(file_path).decode("utf-8", errors="ignore")
-                        logging.info(f"Word文档 {file_path} (textract) 提取文本长度: {len(content)}")
+                        prs = Presentation(file_path)
+                        slides = []
+                        for slide_idx, slide in enumerate(prs.slides):
+                            for shape in slide.shapes:
+                                if hasattr(shape, "text") and getattr(shape, "text", None) and shape.text.strip():
+                                    slides.append(shape.text)
+                                if hasattr(shape, "image") or getattr(shape, "shape_type", None) == 13:
+                                    try:
+                                        from PIL import Image
+                                        import io
+                                        import pytesseract
+                                        image = getattr(shape, "image", None)
+                                        if image:
+                                            img_bytes = image.blob
+                                            img = Image.open(io.BytesIO(img_bytes))
+                                            ocr_text = pytesseract.image_to_string(img, lang='chi_sim')
+                                            if ocr_text.strip():
+                                                slides.append(f"# slide {slide_idx+1} 图片OCR：\n{ocr_text.strip()}")
+                                    except Exception as ocr_e:
+                                        logging.warning(f"PPT 图片OCR失败: {file_path} slide {slide_idx+1}: {ocr_e}")
+                        content = "\n".join(slides)
+                        print(f"[import_materials] 提取文本成功: {file_path} 长度: {len(content)}")
                     except Exception as e:
-                        logging.warning(f"解析 Word(doc) {file_path} 失败: {e}")
-                else:
-                    try:
-                        import subprocess
-                        result = subprocess.run(["antiword", file_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                        if result.returncode == 0:
-                            content = result.stdout.decode("utf-8", errors="ignore")
-                            logging.info(f"Word文档 {file_path} (antiword) 提取文本长度: {len(content)}")
-                        else:
-                            logging.warning(f"antiword 解析 {file_path} 失败: {result.stderr.decode('utf-8', errors='ignore')}")
-                    except Exception as e:
-                        logging.warning(f"未安装 textract/antiword，无法处理 Word(doc) 文件: {file_path}，错误: {e}")
-            if content:
-                model_name = embedding_models[0]["name"]
-                embedder = embedder_dict.get(model_name)
-                if embedder:
-                    vector = embedder.encode(content)
-                    url = f"file://{file_path}"
-                    print(f"[embedding] 生成向量: {url}")
-                    meta = {"url": url, "embedding_model": model_name, "source": "material_dir"}
-                    insert_if_not_exists(url, content, vector, meta, fingerprint_db, qdrant_client, collections[0])
-                    logging.info(f"已导入学习资料: {file_path}")
+                        logging.warning(f"解析 PPT {file_path} 失败: {e}")
+                        print(f"[import_materials] 处理失败: {file_path} 错误: {e}")
+                elif ext == ".docx":
+                    if docx:
+                        try:
+                            doc = docx.Document(file_path)
+                            paras = [p.text for p in doc.paragraphs if p.text.strip()]
+                            content = "\n".join(paras)
+                            logging.info(f"Word文档 {file_path} 提取文本长度: {len(content)}")
+                            print(f"[import_materials] 提取文本成功: {file_path} 长度: {len(content)}")
+                        except Exception as e:
+                            logging.warning(f"解析 Word(docx) {file_path} 失败: {e}")
+                            print(f"[import_materials] 处理失败: {file_path} 错误: {e}")
+                    else:
+                        logging.warning(f"未安装 python-docx，无法处理 Word(docx) 文件: {file_path}")
+                        print(f"[import_materials] 处理失败: {file_path} 错误: 未安装 python-docx")
+                elif ext == ".doc":
+                    if textract:
+                        try:
+                            content = textract.process(file_path).decode("utf-8", errors="ignore")
+                            logging.info(f"Word文档 {file_path} (textract) 提取文本长度: {len(content)}")
+                            print(f"[import_materials] 提取文本成功: {file_path} 长度: {len(content)}")
+                        except Exception as e:
+                            logging.warning(f"解析 Word(doc) {file_path} 失败: {e}")
+                            print(f"[import_materials] 处理失败: {file_path} 错误: {e}")
+                    else:
+                        try:
+                            import subprocess
+                            result = subprocess.run(["antiword", file_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                            if result.returncode == 0:
+                                content = result.stdout.decode("utf-8", errors="ignore")
+                                logging.info(f"Word文档 {file_path} (antiword) 提取文本长度: {len(content)}")
+                                print(f"[import_materials] 提取文本成功: {file_path} 长度: {len(content)}")
+                            else:
+                                logging.warning(f"antiword 解析 {file_path} 失败: {result.stderr.decode('utf-8', errors='ignore')}")
+                                print(f"[import_materials] 处理失败: {file_path} 错误: antiword 解析失败")
+                        except Exception as e:
+                            logging.warning(f"未安装 textract/antiword，无法处理 Word(doc) 文件: {file_path}，错误: {e}")
+                            print(f"[import_materials] 处理失败: {file_path} 错误: 未安装 textract/antiword")
+                if content:
+                    model_name = embedding_models[0]["name"]
+                    embedder = embedder_dict.get(model_name)
+                    if embedder:
+                        vector = embedder.encode(content)
+                        url = f"file://{file_path}"
+                        print(f"[embedding] 生成向量: {url}")
+                        meta = {"url": url, "embedding_model": model_name, "source": "material_dir"}
+                        insert_if_not_exists(url, content, vector, meta, fingerprint_db, qdrant_client, collections[0])
+                        logging.info(f"已导入学习资料: {file_path}")
+                        print(f"[import_materials] 入库成功: {file_path}")
+            except Exception as e:
+                print(f"[import_materials] 处理失败: {file_path} 错误: {e}")
+                logging.error(f"[import_materials] 处理失败: {file_path} 错误: {e}")
     except Exception as e:
         logging.error(f"自动导入学习资料失败: {e}")
