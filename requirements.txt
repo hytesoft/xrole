@@ -1,21 +1,5 @@
 fastapi
 uvicorn
-pydantic
-qdrant-client
-sentence-transformers==2.2.2
+qdrant-client>=1.7,<2.0
+sentence-transformers
 requests
-numpy
-apscheduler
-# requirements for offline sentence-transformers embedding model
-transformers==4.30.2
-huggingface_hub==0.14.1
-tqdm
-pdfplumber
-python-pptx
-openai-whisper
-ffmpeg-python
-pytesseract
-pdf2image
-pillow
-python-docx
-openpyxl
