@@ -1,3 +1,4 @@
-fastapi
-uvicorn
-requests
+fastapi        # Web 框架
+uvicorn        # ASGI 服务器
+requests       # HTTP 客户端，用于调用 embedding/LLM 服务
+pika           # RabbitMQ 消息队列客户端
