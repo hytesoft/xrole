@@ -1,28 +1,39 @@
 import json
+import os
 from fastapi import FastAPI
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams
 
-# 读取配置
-with open("config.conf", "r", encoding="utf-8") as f:
-    config = json.load(f)
-model_conf = config["embedding_models"][0]
-model_path = model_conf.get("dir") or model_conf["name"]
-embedder = SentenceTransformer(model_path)
+# 模型目录写死为 /model，部署时通过 Docker -v /your/model:/model 挂载
+EMBED_MODEL_PATH = "/app/models"
+QDRANT_URL = os.environ.get("XMODEL_QDRANT_URL")
+QDRANT_API_KEY = os.environ.get("XMODEL_QDRANT_API_KEY")
+VECTOR_SIZE = int(os.environ.get("XMODEL_VECTOR_SIZE", 384))
+COLLECTION_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
+
+if not QDRANT_URL:
+    # 兜底读取 config.conf
+    with open("config.conf", "r", encoding="utf-8") as f:
+        config = json.load(f)
+    model_conf = config["embedding_models"][0]
+    # EMBED_MODEL_PATH = model_conf.get("dir") or model_conf["name"]  # 已写死
+    qdrant_conf = config.get("qdrant", {})
+    QDRANT_URL = qdrant_conf.get("url")
+    QDRANT_API_KEY = qdrant_conf.get("api_key")
+    VECTOR_SIZE = model_conf.get("dim", VECTOR_SIZE)
+    COLLECTION_NAME = config.get("collection", COLLECTION_NAME)
+
+embedder = SentenceTransformer(EMBED_MODEL_PATH)
 
 # 初始化 Qdrant 客户端
-qdrant_conf = config.get("qdrant", {})
 qdrant_client = QdrantClient(
-    url=qdrant_conf.get("url"),
-    api_key=qdrant_conf.get("api_key"),
+    url=QDRANT_URL,
+    api_key=QDRANT_API_KEY,
     prefer_grpc=False,
     verify=False
 )
-
-COLLECTION_NAME = "xrole_docs"
-VECTOR_SIZE = 384  # 视你的 embedding 维度而定
 
 def ensure_qdrant_collection():
     if not qdrant_client.collection_exists(COLLECTION_NAME):
