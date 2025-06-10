@@ -2,16 +2,16 @@
 FROM python:3.11-slim
 
 # 使用国内 apt 源加速（以中科大为例，可换为阿里/清华等）
-
+# 复制项目文件
+COPY web_api.py /app/web_api.py
+COPY requirements.txt /app/requirements.txt
+COPY config /app/config
 # 安装系统依赖（tesseract-ocr、ffmpeg、中文语言包等）
 RUN pip3 install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r /app/requirements.txt
 # 设置工作目录
 WORKDIR /app
 
-# 复制项目文件
-COPY web_api.py /app/web_api.py
-COPY requirements.txt /app/requirements.txt
-COPY config /app/config
+
 # 安装 Python 依赖
 
 
