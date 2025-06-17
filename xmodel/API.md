@@ -13,15 +13,44 @@
 
 ---
 
-## 1. /doc 
+## 1. /upload（推荐使用）
 **功能**：上传并处理文档（支持多种格式）
+
+- URL：`/upload`
+- 方法：POST
+- 请求格式：`multipart/form-data`
+- 参数：
+  - `file`：文件内容（必填）
+  - `user_id`：用户标识（必填）
+  - `doc_id`：文档唯一标识（必填）
+- 支持的文件类型：
+  - 纯文本文件（.txt）
+  - Markdown文件（.md, .markdown）
+  - PDF文件（.pdf）
+  - Word文档（.docx）
+- 返回：
+```json
+{
+  "success": true,
+  "message": "文档已处理并存储,ID:doc123,共处理5个文本块"
+}
+```
+- 注意事项：
+  - 文件会被自动分块处理，每块最大500字符
+  - 支持批量处理，每100个块自动上传一次
+  - 纯文本文件需要使用UTF-8编码
+
+## 2. /doc（低级接口）
+**功能**：上传并处理文档的底层接口
+
+> ⚠️ 注意：推荐使用更简单的 `/upload` 接口。这是一个低级接口，主要用于程序内部调用。
 
 - URL：`/doc`
 - 方法：POST
 - 请求体：
 ```json
 {
-  "content": "二进制文件内容（base64编码）",
+  "content": "二进制文件内容（注意：直接使用二进制内容，不要进行base64编码）",
   "content_type": "text/plain",  // 文件类型，支持 text/plain, text/markdown, text/x-markdown, application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document
   "user_id": "user123",  // 必填，用户标识
   "doc_id": "doc123"     // 可选，文档唯一标识，不传则自动生成
@@ -35,12 +64,12 @@
 }
 ```
 - 注意事项：
-  - 文件会被自动分块处理，每块最大500字符
-  - 支持批量处理，每100个块自动上传一次
-  - 纯文本文件需要使用UTF-8编码
-  - 大文件建议压缩后传输
+  - 这是一个低级接口，需要手动处理二进制内容
+  - 不要对二进制内容进行base64编码
+  - 直接使用原始二进制数据
+  - 对于大多数使用场景，建议使用 `/upload` 接口
 
-## 2. /search
+## 3. /search
 **功能**：搜索相似文本内容（语义检索）
 
 - URL：`/search`
@@ -78,7 +107,7 @@
   - 会返回用户自己上传的文档中最相似的内容
   - score 表示相似度得分（0-1之间，越大越相似）
 
-## 3. /delete_doc
+## 4. /delete_doc
 **功能**：删除指定文档的所有内容
 
 - URL：`/delete_doc`
@@ -102,7 +131,7 @@
   - 删除操作会删除该文档的所有文本块
   - 删除后不可恢复
 
-## 4. /delete_user
+## 5. /delete_user
 **功能**：删除用户的所有数据
 
 - URL：`/delete_user`
