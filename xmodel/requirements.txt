@@ -4,3 +4,4 @@ qdrant-client>=1.7,<2.0
 sentence-transformers
 PyPDF2 
 python-docx
+python-multipart

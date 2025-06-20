@@ -507,7 +507,7 @@ async def upload_file(
             elif file.filename.endswith(('.md', '.markdown')):
                 content_type = 'text/markdown'
             else:
-                content_type = 'text/plain'
+                raise ValueError('不支持的文件类型')
         
         # 构造二进制文档请求
         doc_request = BinaryDocRequest(
